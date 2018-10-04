@@ -64,7 +64,7 @@ get_inbox_rdbms(LUser, LServer, #{ order := Order } = Params) ->
 
 
 get_inbox_unread(Username, Server) ->
-    case mongoose_rdbms:sql_query(Server,
+    Res = mongoose_rdbms:sql_query(Server,
                                   ["select unread_count from inbox "
                                    "WHERE luser=", esc_string(Username), 
                                    " AND lserver=", esc_string(Server), ";"]) of
@@ -75,7 +75,6 @@ get_inbox_unread(Username, Server) ->
             CountBin = integer_to_binary(Count),
             {ok, CountBin}
     end.
-
 
 -spec set_inbox(Username, Server, ToBareJid, Content,
                 Count, MsgId, Timestamp) -> inbox_write_res() when
@@ -232,9 +231,17 @@ check_result({updated, Res}, Exp) ->
 check_result(Result, _) ->
     {error, {bad_result, Result}}.
 
-%% TODO
 check_result({updated, _, [{Val}]}) ->
-    {ok, Val};
+ case Val of
+        null ->
+            {ok, 1};
+        V when is_integer(V) ->
+            {ok, V};
+        V when is_binary(V) ->
+            {ok, binary_to_integer(V)};
+        _ ->
+           ok
+    end;
 
 check_result({updated, _}) ->
     ok;
