@@ -68,14 +68,14 @@ get_inbox_unread(Username, Server) ->
     Res = mongoose_rdbms:sql_query(Server,
                                   ["select unread_count from inbox "
                                    "WHERE luser=", esc_string(Username), 
-                                   " AND lserver=", esc_string(Server), ";"]) of
-        {selected, []} ->
-            ok;
-        {selected, [{CountBin0}]} ->
-            Count = binary_to_integer(CountBin0) + 1,
-            CountBin = integer_to_binary(Count),
-            {ok, CountBin}
-    end.
+                                   " AND lserver=", esc_string(Server), ";"]),
+   case check_result(Res) of
+       {ok, []} ->
+          ok;
+       {ok, Count} ->
+           {ok, Count + 1}
+   end. 
+
 
 -spec set_inbox(Username, Server, ToBareJid, Content,
                 Count, MsgId, Timestamp) -> inbox_write_res() when
@@ -122,7 +122,7 @@ remove_inbox_rdbms(Username, Server, ToBareJid) ->
                             ToBareJid :: binary(),
                             Content :: binary(),
                             MsgId :: binary(),
-                            Timestamp :: erlang:timestamp()) -> ok.
+                            Timestamp :: erlang:timestamp()) -> {ok, binary()}.
 set_inbox_incr_unread(Username, Server, ToBareJid, Content, MsgId, Timestamp) ->
     LUsername = jid:nodeprep(Username),
     LServer = jid:nameprep(Server),
@@ -131,8 +131,8 @@ set_inbox_incr_unread(Username, Server, ToBareJid, Content, MsgId, Timestamp) ->
     NumericTimestamp = usec:from_now(Timestamp),
     Res = BackendModule:set_inbox_incr_unread(LUsername, LServer, LToBareJid,
                                               Content, MsgId, NumericTimestamp),
-    %% psql will always return {updated, 1}
-    %% but mysql will return {updated, 2} if it overwrites the row
+    %% psql will return {updated, {[UnreadCount]}}
+    %% mssql and mysql will return {selected, {[Val]}}
     check_result(Res).
 
 -spec reset_unread(User :: binary(),
@@ -241,6 +241,21 @@ check_result({updated, Res}, Exp) ->
     {error, {expected_does_not_match, Exp, Res}};
 check_result(Result, _) ->
     {error, {bad_result, Result}}.
+
+check_result({selected, []}) ->
+    ok;
+
+check_result({selected, [{Val}]}) ->
+    case Val of
+        null ->
+            {ok, 1};
+        V when is_integer(V) ->
+            {ok, V};
+        V when is_binary(V) ->
+            {ok, binary_to_integer(V)};
+        _ ->
+           ok
+    end;
 
 check_result({updated, _, [{Val}]}) ->
  case Val of
