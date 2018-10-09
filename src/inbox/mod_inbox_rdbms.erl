@@ -67,14 +67,16 @@ get_inbox_rdbms(LUser, LServer, #{ order := Order } = Params) ->
 get_inbox_unread(Username, Server) ->
     Res = mongoose_rdbms:sql_query(Server,
                                   ["select unread_count from inbox "
-                                   "WHERE luser=", esc_string(Username), 
+                                   "WHERE luser=", esc_string(Username),
                                    " AND lserver=", esc_string(Server), ";"]),
    case check_result(Res) of
        {ok, []} ->
           ok;
        {ok, Count} ->
-           {ok, Count + 1}
-   end. 
+           {ok, Count + 1};
+       _ ->
+           ?ERROR_MSG("mod_inbox_rdbms:get_inbox_unread ~p~n", [Res])
+   end.
 
 
 -spec set_inbox(Username, Server, ToBareJid, Content,
